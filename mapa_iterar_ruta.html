@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
+		<title>Intersección Línea-Polígono</title>
+		<link rel="stylesheet" href="https://js.arcgis.com/3.26/esri/css/esri.css">
+		<style>
+			html, body {
+			height: 100%;
+			margin: 0;
+			padding: 0;
+			}
+			#map {
+			  width: 100%;
+			  height: 95%;
+			  margin-bottom: 20px;
+			}
+
+			#btnIterate {
+			  display: block;
+			  margin: 0 auto;
+			}
+		</style>
+		<script src="https://js.arcgis.com/3.26/"></script>
+		<script>
+			require([
+					"esri/map",
+					"esri/graphic",
+					"esri/layers/GraphicsLayer",
+					"esri/geometry/Point",
+					"esri/geometry/Polyline",
+					"esri/geometry/Polygon",
+					"esri/symbols/SimpleFillSymbol",
+					"esri/symbols/SimpleLineSymbol",
+					"esri/symbols/SimpleMarkerSymbol",
+					"esri/geometry/geometryEngine",
+					"dojo/domReady!"
+				], function (Map, Graphic, GraphicsLayer, Point, Polyline, Polygon, SimpleFillSymbol, SimpleLineSymbol, SimpleMarkerSymbol, geoEngine) {
+
+				var mapa;
+
+				//function initializeMap() {
+				// Crear el mapa
+				mapa = new Map("map", {
+					basemap: "streets",
+					center: [-122.45, 37.75],
+					zoom: 13
+				});
+
+				// Crear capa gráfica para polígono, puntos y línea
+				var graphicsLayer = new GraphicsLayer();
+				mapa.addLayer(graphicsLayer);
+
+				var polygonGraphic = generarPoligonoGrafico();
+
+				var point1Graphic = generarPuntosGraficos(-122.47, 37.77, graphicsLayer.spatialReference);
+				var point2Graphic = generarPuntosGraficos(-122.43, 37.78, graphicsLayer.spatialReference);
+
+				var lineGraphic = new Graphic(new Polyline([[point1Graphic.geometry.x, point1Graphic.geometry.y], [point2Graphic.geometry.x, point2Graphic.geometry.y]]), simboloLinea());
+
+				graphicsLayer.add(polygonGraphic)
+				graphicsLayer.add(point1Graphic);
+				graphicsLayer.add(point2Graphic);
+				graphicsLayer.add(lineGraphic);
+
+				// Manejador de eventos para el botón
+				var btnIterate = document.getElementById("btnIterate");
+				btnIterate.addEventListener("click", directorDeLaFuncion);
+
+				function directorDeLaFuncion(){
+					var terminado = false;
+					while(terminado == false){
+						//var puntoPaso = puntosDeCorte2(lineGraphic);
+						terminado = puntosDeCorte();
+					}
+				}
+				
+				function puntosDeCorte() {
+
+					if (geoEngine.intersects(polygonGraphic.geometry, lineGraphic.geometry)) {
+						// Obtener el punto de intersección más cercano
+						var intersectionPoints = geoEngine.intersect(polygonGraphic.geometry, lineGraphic.geometry);
+
+						var intersectionPoint1 = generarPuntosGraficos(intersectionPoints.paths[0][0][0], intersectionPoints.paths[0][0][1], graphicsLayer.spatialReference);
+						var intersectionPoint2 = generarPuntosGraficos(intersectionPoints.paths[0][1][0], intersectionPoints.paths[0][1][1], graphicsLayer.spatialReference);
+
+						var medio = generarPuntosGraficos((intersectionPoints.paths[0][0][0] + intersectionPoints.paths[0][1][0]) / 2, (intersectionPoints.paths[0][0][1] + intersectionPoints.paths[0][1][1]) / 2, graphicsLayer.spatialReference);
+
+						//Vertices más cercanos
+						var nearest1 = buscarVertice(polygonGraphic, intersectionPoint1);
+						var nearest2 = buscarVertice(polygonGraphic, intersectionPoint2);
+
+						var nearestPoint1 = generarPuntosGraficos(nearest1.coordinate.x, nearest1.coordinate.y, nearest1.coordinate.spatialReference);
+						var nearestPoint2 = generarPuntosGraficos(nearest2.coordinate.x, nearest2.coordinate.y, nearest2.coordinate.spatialReference);						
+
+						setTimeout(function(){graphicsLayer.add(intersectionPoint1)}, 2000);
+						setTimeout(function(){graphicsLayer.add(intersectionPoint2)}, 4000);
+						setTimeout(function(){graphicsLayer.add(medio)}, 6000);
+						setTimeout(function(){graphicsLayer.add(nearestPoint1)}, 8000);
+						setTimeout(function(){graphicsLayer.add(nearestPoint2)}, 10000);
+						
+						var distancia1 = (Math.sqrt(Math.pow(intersectionPoint1.geometry.x - nearestPoint1.geometry.x, 2) + Math.pow(intersectionPoint1.geometry.y - nearestPoint1.geometry.y, 2)))/2;
+						var distancia2 = (Math.sqrt(Math.pow(intersectionPoint2.geometry.x - nearestPoint2.geometry.x, 2) + Math.pow(intersectionPoint2.geometry.y - nearestPoint2.geometry.y, 2)))/2;
+
+						var nearestDesplazado1 = new Point(nearestPoint1.geometry.x+distancia1, nearestPoint1.geometry.y+distancia1,nearestPoint1.geometry.spatialReference);
+						var nearestDesplazado2 = new Point(nearestPoint2.geometry.x+distancia2, nearestPoint2.geometry.y+distancia2,nearestPoint2.geometry.spatialReference);
+
+						setTimeout(function(){nearestPoint1.setGeometry(nearestDesplazado1)}, 12000);
+						setTimeout(function(){nearestPoint2.setGeometry(nearestDesplazado2)}, 14000);
+
+						
+
+						/*var nearest = buscarVertices(polygon, medio, 2); //geoEngine.nearestVertices(polygon, medio, 1/111.32, 2);
+
+						nearest.sort(function(a, b) {
+						return a.distance - b.distance;
+						});*/
+
+						return true;
+
+					} else {
+						console.log("La línea no intersecta el polígono.");
+						return false;
+					}
+				}
+
+				function puntosDeCorte2(linea){
+					if(geoEngine.intersects(polygonGraphic.geometry, linea.geometry)){
+						//se buscan y se crean los gráficos de los puntos donde intersecta la línea con el polígono. Deben ser dos. Para el caso en que haya N, se trabajará
+						//con el envelope de todos los puntos
+						var intersectionPoints = geoEngine.intersect(polygonGraphic.geometry, linea.geometry);
+
+						var intersectionPoint1 = generarPuntosGraficos(intersectionPoints.paths[0][0][0], intersectionPoints.paths[0][0][1], graphicsLayer.spatialReference);
+						var intersectionPoint2 = generarPuntosGraficos(intersectionPoints.paths[0][1][0], intersectionPoints.paths[0][1][1], graphicsLayer.spatialReference);
+
+						//Se halla el punto medio entre los dos anteriores
+						var medio = generarPuntosGraficos((intersectionPoints.paths[0][0][0] + intersectionPoints.paths[0][1][0]) / 2, (intersectionPoints.paths[0][0][1] + intersectionPoints.paths[0][1][1]) / 2, graphicsLayer.spatialReference);
+
+						//Se determina si el punto medio está dentro o fuera
+						//despues
+
+						//Punto más cercano al punto medio en el borde del polígono
+						//1º hay que extraer el borde del polígono
+						var bordePoligono = new Polyline(graphicsLayer.spatialReference)
+						var rings = polygonGraphic.geometry.rings;
+						for(var i=0; i<rings.length; i++){
+							var ring = rings[i];
+							//var point = polygonGraphic.geometry.getPoint(i, j);
+							bordePoligono.addPath(ring);
+						}
+						var nearestPoint = geoEngine.nearestCoordinate(bordePoligono, medio.geometry);
+						var nearestPointGrp = generarPuntosGraficos(nearestPoint.coordinate.x, nearestPoint.coordinate.y, nearestPoint.coordinate.spatialReference);
+
+						setTimeout(function(){graphicsLayer.add(intersectionPoint1)}, 2000);
+						setTimeout(function(){graphicsLayer.add(intersectionPoint2)}, 4000);
+						setTimeout(function(){graphicsLayer.add(medio)}, 6000);
+						setTimeout(function(){graphicsLayer.add(nearestPointGrp)}, 8000);
+
+						var distX = nearestPoint.coordinate.x - medio.geometry.x; //Math.abs(medio.geometry.x - nearestPoint.x);
+						var distY = nearestPoint.coordinate.y - medio.geometry.y; //Math.abs(medio.geometry.y - nearestPoint.y)
+
+						var solucion = new Point(nearestPoint.coordinate.x + distX, nearestPoint.coordinate.y + distY, graphicsLayer.spatialReference);
+
+						setTimeout(function(){nearestPointGrp.setGeometry(solucion)}, 10000)
+
+						return solucion;
+
+					}
+				}
+
+				function generarPuntosGraficos(x, y, refEspacial) {
+					var punto = new Point(x, y, refEspacial);
+					// Símbolo para los puntos
+					var pointSymbol = new SimpleMarkerSymbol(
+							SimpleMarkerSymbol.STYLE_CIRCLE,
+							10, // Tamaño del símbolo
+							simboloLinea(),
+							[0, 0, 255, 0.5]// Color de relleno del símbolo (azul transparente)
+						);
+
+					var grafico = new Graphic(punto, pointSymbol);
+
+					return grafico;
+				}
+
+				function generarPoligonoGrafico() {
+					// Crear polígono de ejemplo
+					var polygon = new Polygon([[[-122.46, 37.78], [-122.46, 37.76], [-122.44, 37.76], [-122.44, 37.78], [-122.46, 37.78]]]);
+					var polygonSymbol = new SimpleFillSymbol(
+							SimpleFillSymbol.STYLE_SOLID,
+							new SimpleLineSymbol(
+								SimpleLineSymbol.STYLE_SOLID,
+								[255, 0, 0], // Color del borde del polígono (rojo)
+								2 // Ancho del borde del polígono
+							),
+							[255, 255, 0, 0.5]// Color de relleno del polígono (amarillo transparente)
+						);
+					var polygonGraphic = new Graphic(polygon, polygonSymbol);
+
+					return polygonGraphic;
+				}
+
+				function simboloLinea() {
+					var lineSym = new SimpleLineSymbol(
+							SimpleLineSymbol.STYLE_SOLID,
+							[0, 0, 255], // Color del borde del símbolo (azul)
+							2 // Ancho del borde del símbolo
+						);
+					return lineSym;
+				}
+
+				function buscarVertice(poligonoGrafico, puntoGrafico) {
+					return geoEngine.nearestVertex(poligonoGrafico.geometry, puntoGrafico.geometry);
+				}
+
+				function buscarVertices(poligonoAesquivar, ptoReferencia, numeroVertices) {
+					var nearest = [];
+					for (var distancia = 1; distancia <= 10000; distancia += 2) {
+						distanciaTrans = distancia / 111.32; //1000km a 111.32º por km, como aproximación burda nearest = geoEngine.nearestVertices(poligonoAesquivar, ptoReferencia, distanciaTrans, numeroVertices);
+						if (nearest.length >= numeroVertices) {
+							break;
+						}
+					}
+					return nearest
+				}
+			});
+		</script>
+	</head>
+	<body>
+		<div id="map"></div>
+		<button id="btnIterate">Iterar</button>
+	</body>
+</html>
